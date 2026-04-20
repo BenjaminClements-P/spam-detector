@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpamShield AI — Email Spam Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --card: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #ff4757;
+    --accent2: #2ed573;
+    --amber: #ffa502;
+    --text: #e8e8f0;
+    --muted: #7070a0;
+    --font-mono: 'Space Mono', monospace;
+    --font-body: 'DM Sans', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  /* ── Noise overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+  /* ── Header ── */
+  header {
+    position: relative; z-index: 10;
+    padding: 2rem 2.5rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--accent); }
+  .header-badge {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  /* ── Main layout ── */
+  main {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2.5rem;
+    width: 100%;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+  }
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+  }
+  /* ── Form ── */
+  .form-panel { padding-right: 2rem; }
+  .input-group { margin-bottom: 1.25rem; }
+  label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.5px;
+  }
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: vertical;
+  }
+  input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { min-height: 160px; }
+  /* ── Buttons ── */
+  .btn-analyze {
+    width: 100%;
+    padding: 1rem;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    margin-top: 0.5rem;
+  }
+  .btn-analyze:hover { opacity: 0.9; }
+  .btn-analyze:active { transform: scale(0.99); }
+  .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* ── Samples ── */
+  .samples-row {
+    display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+  }
+  .sample-btn {
+    font-size: 0.72rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: all 0.2s;
+  }
+  .sample-btn:hover { border-color: var(--accent); color: var(--text); }
+  .sample-btn.spam-sample:hover { border-color: var(--accent); }
+  .sample-btn.ham-sample:hover  { border-color: var(--accent2); }
+  /* ── Result panel ── */
+  .result-panel { display: flex; flex-direction: column; gap: 1.25rem; }
+  /* ── Verdict card ── */
+  .verdict-card {
+    border-radius: 12px;
+    padding: 1.75rem;
+    border: 1px solid var(--border);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s ease;
+  }
+  .verdict-card.spam-verdict {
+    background: rgba(255,71,87,0.08);
+    border-color: var(--accent);
+  }
+  .verdict-card.ham-verdict {
+    background: rgba(46,213,115,0.08);
+    border-color: var(--accent2);
+  }
+  .verdict-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+  .verdict-label {
+    font-family: var(--font-mono);
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    letter-spacing: -1px;
+  }
+  .verdict-label.spam { color: var(--accent); }
+  .verdict-label.ham  { color: var(--accent2); }
+  .verdict-confidence {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  /* ── Probability bar ── */
+  .prob-bars { display: flex; flex-direction: column; gap: 0.75rem; }
+  .prob-row { display: flex; align-items: center; gap: 0.75rem; }
+  .prob-name {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    width: 40px;
+    letter-spacing: 1px;
+  }
+  .prob-name.spam { color: var(--accent); }
+  .prob-name.ham  { color: var(--accent2); }
+  .prob-bar-track {
+    flex: 1; height: 8px; background: var(--surface);
+    border-radius: 99px; overflow: hidden;
+  }
+  .prob-bar-fill {
+    height: 100%; border-radius: 99px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .prob-bar-fill.spam { background: var(--accent); }
+  .prob-bar-fill.ham  { background: var(--accent2); }
+  .prob-pct {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    width: 38px;
+    text-align: right;
+    color: var(--muted);
+  }
+  /* ── Features ── */
+  .features-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .feature-tag {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid;
+    letter-spacing: 0.5px;
+  }
+  .feature-tag.high { border-color: var(--accent); color: var(--accent); background: rgba(255,71,87,0.08); }
+  .feature-tag.mid  { border-color: var(--amber); color: var(--amber); background: rgba(255,165,2,0.08); }
+  .feature-tag.low  { border-color: var(--border); color: var(--muted); }
+  /* ── Feedback ── */
+  .feedback-row { display: flex; gap: 0.75rem; }
+  .feedback-btn {
+    flex: 1; padding: 0.6rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .feedback-btn.mark-spam { color: var(--accent); }
+  .feedback-btn.mark-ham  { color: var(--accent2); }
+  .feedback-btn.mark-spam:hover { background: rgba(255,71,87,0.15); border-color: var(--accent); }
+  .feedback-btn.mark-ham:hover  { background: rgba(46,213,115,0.15); border-color: var(--accent2); }
+  /* ── Stats ── */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem;
+    text-align: center;
+  }
+  .stat-num {
+    font-family: var(--font-mono);
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .stat-num.red { color: var(--accent); }
+  .stat-num.green { color: var(--accent2); }
+  .stat-label { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+  /* ── Idle state ── */
+  .idle-state {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+  }
+  .idle-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.4; }
+  .idle-text { font-size: 0.85rem; line-height: 1.6; }
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    font-size: 0.85rem;
+    z-index: 100;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.35s ease;
+    max-width: 300px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  /* ── Spinner ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Spam<span>Shield</span> AI</div>
+  <div class="header-badge">NAIVE BAYES + NLP + HASH TABLE</div>
+</header>
+
+<main>
+  <!-- LEFT: Input form -->
+  <div class="form-panel">
+    <p class="card-title">Try a sample →</p>
+    <div class="samples-row">
+      <button class="sample-btn spam-sample" onclick="loadSample('spam1')">🚨 Prize Winner</button>
+      <button class="sample-btn spam-sample" onclick="loadSample('spam2')">💊 Pharma Ad</button>
+      <button class="sample-btn spam-sample" onclick="loadSample('spam3')">💰 Get Rich</button>
+      <button class="sample-btn ham-sample"  onclick="loadSample('ham1')">📅 Meeting Note</button>
+      <button class="sample-btn ham-sample"  onclick="loadSample('ham2')">📦 Order Update</button>
+      <button class="sample-btn ham-sample"  onclick="loadSample('ham3')">👋 Casual Hi</button>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Compose Email</p>
+      <div class="input-group">
+        <label>Subject Line</label>
+        <input type="text" id="subject" placeholder="e.g. Congratulations! You've won..." />
+      </div>
+      <div class="input-group">
+        <label>Email Body</label>
+        <textarea id="body" placeholder="Paste or type email content here..."></textarea>
+      </div>
+      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">
+        ANALYZE EMAIL
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div style="margin-top:1.25rem;">
+      <p class="card-title">Hash Table Index Stats</p>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-box"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Indexed</div></div>
+        <div class="stat-box"><div class="stat-num red" id="statSpam">—</div><div class="stat-label">Spam</div></div>
+        <div class="stat-box"><div class="stat-num green" id="statHam">—</div><div class="stat-label">Legitimate</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results panel -->
+  <div class="result-panel" id="resultPanel">
+    <div class="idle-state" id="idleState">
+      <div class="idle-icon">🔍</div>
+      <div class="idle-text">Paste an email and click<br><strong>Analyze Email</strong> to detect spam.</div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SAMPLES = {
+  spam1: { subject: "🎉 You've Won $1,000!", body: "Congratulations! You have been selected as our lucky winner for a $1000 Walmart gift card. Click here immediately to claim your free prize before it expires! Limited time offer only for selected customers." },
+  spam2: { subject: "Cheap Meds No Prescription", body: "Buy Viagra and other medications online at 90% discount! No prescription required. Fast shipping guaranteed. Order now and get extra pills free!" },
+  spam3: { subject: "Make $5000 Weekly From Home", body: "URGENT: Earn money fast working from home! No experience required. Guaranteed income of $5000 per week. Join thousands who are already making money. Free sign up today!" },
+  ham1:  { subject: "Team Meeting Rescheduled", body: "Hi everyone, just a heads up that the project sync meeting has been moved to Thursday at 3 PM in conference room B. Please update your calendars. Let me know if you have any conflicts." },
+  ham2:  { subject: "Your Order Has Shipped", body: "Your order #45231 has been shipped and is on its way! Expected delivery by Friday. You can track your package using the link in your account dashboard. Thank you for shopping with us." },
+  ham3:  { subject: "Lunch tomorrow?", body: "Hey! Are you free for lunch tomorrow around noon? Thought we could catch up. Let me know if that works for you or if you'd prefer another day." },
+};
+
+function loadSample(key) {
+  const s = SAMPLES[key];
+  document.getElementById('subject').value = s.subject;
+  document.getElementById('body').value = s.body;
+}
+
+async function analyze() {
+  const subject = document.getElementById('subject').value.trim();
+  const body    = document.getElementById('body').value.trim();
+  if (!subject && !body) { showToast('⚠️ Please enter an email first.'); return; }
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>ANALYZING...';
+
+  try {
+    const res  = await fetch('/predict', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ subject, body })
+    });
+    const data = await res.json();
+    renderResult(data, subject, body);
+    updateStats(data.stats);
+  } catch(e) {
+    showToast('❌ Analysis failed. Is the server running?');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'ANALYZE EMAIL';
+  }
+}
+
+function renderResult(data, subject, body) {
+  const isSpam = data.label === 'spam';
+  const spamPct = Math.round((data.spam_prob || (isSpam ? data.confidence : 1-data.confidence)) * 100);
+  const hamPct  = 100 - spamPct;
+
+  // Build feature tags
+  const featureTags = (data.features || []).slice(0, 8).map(f => {
+    const strength = f.tfidf > 0.3 ? 'high' : f.tfidf > 0.15 ? 'mid' : 'low';
+    return `<span class="feature-tag ${strength}">${f.word}</span>`;
+  }).join('');
+
+  const panel = document.getElementById('resultPanel');
+  panel.innerHTML = `
+    <!-- Verdict -->
+    <div class="verdict-card ${isSpam ? 'spam-verdict' : 'ham-verdict'}">
+      <div class="verdict-icon">${isSpam ? '🚨' : '✅'}</div>
+      <div class="verdict-label ${data.label}">${isSpam ? 'SPAM' : 'LEGITIMATE'}</div>
+      <div class="verdict-confidence">${Math.round(data.confidence * 100)}% confidence${data.cached ? ' · cached result' : ''}</div>
+    </div>
+
+    <!-- Probability bars -->
+    <div class="card">
+      <p class="card-title">Classification Probabilities</p>
+      <div class="prob-bars">
+        <div class="prob-row">
+          <span class="prob-name spam">SPAM</span>
+          <div class="prob-bar-track">
+            <div class="prob-bar-fill spam" style="width:0%" id="spamBar"></div>
+          </div>
+          <span class="prob-pct">${spamPct}%</span>
+        </div>
+        <div class="prob-row">
+          <span class="prob-name ham">HAM</span>
+          <div class="prob-bar-track">
+            <div class="prob-bar-fill ham" style="width:0%" id="hamBar"></div>
+          </div>
+          <span class="prob-pct">${hamPct}%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- NLP Features -->
+    ${featureTags ? `<div class="card">
+      <p class="card-title">Top NLP Features Detected</p>
+      <div class="features-list">${featureTags}</div>
+    </div>` : ''}
+
+    <!-- Adaptive Feedback -->
+    <div class="card">
+      <p class="card-title">Adaptive Learning — Correct the Model</p>
+      <div class="feedback-row">
+        <button class="feedback-btn mark-spam" onclick="sendFeedback('spam')">🚨 MARK AS SPAM</button>
+        <button class="feedback-btn mark-ham"  onclick="sendFeedback('ham')">✅ MARK AS LEGIT</button>
+      </div>
+    </div>
+  `;
+
+  // Animate bars
+  setTimeout(() => {
+    document.getElementById('spamBar').style.width = spamPct + '%';
+    document.getElementById('hamBar').style.width  = hamPct  + '%';
+  }, 80);
+
+  window._lastSubject = subject;
+  window._lastBody    = body;
+}
+
+async function sendFeedback(label) {
+  try {
+    const res  = await fetch('/feedback', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ subject: window._lastSubject, body: window._lastBody, correct_label: label })
+    });
+    const data = await res.json();
+    showToast('🧠 ' + data.message);
+    updateStats(data.stats);
+  } catch(e) {
+    showToast('❌ Feedback failed.');
+  }
+}
+
+function updateStats(stats) {
+  if (!stats) return;
+  document.getElementById('statTotal').textContent = stats.total;
+  document.getElementById('statSpam').textContent  = stats.spam;
+  document.getElementById('statHam').textContent   = stats.ham;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Load initial stats
+fetch('/stats').then(r=>r.json()).then(updateStats).catch(()=>{});
+</script>
+</body>
+</html>
